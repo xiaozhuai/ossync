@@ -4,8 +4,8 @@
     "description": "aliyun oss sync tool, like rsync",
     "main": "index.js",
     "scripts": {
-        "build-macos64": "pkg -t node10-macos-x64 -o dist/ossync index.js",
-        "build-linux64": "pkg -t node10-linux-x64 -o dist/ossync index.js",
+        "build-macos64": "pkg -t node10-macos-x64 -o dist/ossync_macos64 index.js",
+        "build-linux64": "pkg -t node10-linux-x64 -o dist/ossync_linux64 index.js",
         "build-win32": "pkg -t node10-win-x86 -o dist/ossync32.exe index.js",
         "build-win64": "pkg -t node10-win-x64 -o dist/ossync64.exe index.js"
     },

@@ -52,3 +52,7 @@ $ yarn run build-macos64 # 可选平台有: macos64, linux64, win32, win64
 2. ossync的数据是单向的, 即从本地文件系统到OSS.
 3. ossync的同步策略默认是增量模式, 它的增量实现依赖于文件的特征值, 尽管ossync采用了效率极高的xxhash, 
 但这仍会带来一定的性能损失. 这也是为什么它不适合作为大量文件传输的方式. 通常文件数在10000个以内比较适用.
+
+## Releases
+
+请在release页下载打包好的二进制版本 `binaries.zip`
