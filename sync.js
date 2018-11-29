@@ -73,6 +73,8 @@ module.exports = async (opts) => {
         for (let file of removeList) console.log(chalk.red(`    Remove ${file}`));
         console.log(`\nTotal: ${totalChanges} changes`);
 
+        if(opts.hasOwnProperty('dry') && opts.dry) return;
+
         let bar = new progress.Bar();
         bar.start(totalChanges, 0);
         let finishedCount = 0;

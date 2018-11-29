@@ -11,6 +11,7 @@ prog.command('sync')
     .option('-c, --config', 'Specify config file', '.ossyncconfig')
     .option('-i, --ignore', 'Specify ignore file', '.ossyncignore')
     .option('-f, --force', 'Force re-sync all files', false)
+    .option('-d, --dry', 'Dry run', false)
     .action(opts => {
         sync(opts);
     });
