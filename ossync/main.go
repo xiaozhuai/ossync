@@ -14,10 +14,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"ossync/internal/config"
-	ignorefile "ossync/internal/ignore"
-	"ossync/internal/ossstore"
-	"ossync/internal/syncer"
+	"github.com/xiaozhuai/ossync/internal/config"
+	ignorefile "github.com/xiaozhuai/ossync/internal/ignore"
+	"github.com/xiaozhuai/ossync/internal/ossstore"
+	"github.com/xiaozhuai/ossync/internal/syncer"
 )
 
 type options struct {

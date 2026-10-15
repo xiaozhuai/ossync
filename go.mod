@@ -1,4 +1,4 @@
-module ossync
+module github.com/xiaozhuai/ossync
 
 go 1.23
 

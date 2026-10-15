@@ -8,8 +8,8 @@ import (
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss/credentials"
 
-	"ossync/internal/config"
-	"ossync/internal/syncer"
+	"github.com/xiaozhuai/ossync/internal/config"
+	"github.com/xiaozhuai/ossync/internal/syncer"
 )
 
 const maxSimpleUploadSize = int64(5 * 1024 * 1024 * 1024)

@@ -4,6 +4,12 @@
 
 `ossync` performs one-way synchronization from a local directory to Alibaba Cloud OSS. New and modified local files are uploaded, while OSS objects that no longer exist locally are removed. Deletions start only after every upload succeeds. Before making changes, it displays the planned tasks and asks for confirmation.
 
+## Installation
+
+```bash
+go install github.com/xiaozhuai/ossync/ossync@latest
+```
+
 ## Configuration
 
 By default, `ossync` reads `.ossyncconfig` from the directory being synchronized:

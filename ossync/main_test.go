@@ -13,8 +13,8 @@ import (
 
 	"github.com/mattn/go-colorable"
 
-	"ossync/internal/config"
-	"ossync/internal/syncer"
+	"github.com/xiaozhuai/ossync/internal/config"
+	"github.com/xiaozhuai/ossync/internal/syncer"
 )
 
 func TestConfirm(t *testing.T) {

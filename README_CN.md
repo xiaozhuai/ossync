@@ -4,6 +4,12 @@
 
 `ossync` 将本地目录单向同步到阿里云 OSS：本地新增或修改的文件会上传，OSS 中本地已不存在的对象会删除。只有全部上传成功后才会开始删除。执行前会列出完整任务并要求确认。
 
+## 安装
+
+```bash
+go install github.com/xiaozhuai/ossync/ossync@latest
+```
+
 ## 配置
 
 默认读取待同步目录中的 `.ossyncconfig`：
