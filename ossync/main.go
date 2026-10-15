@@ -21,14 +21,16 @@ import (
 )
 
 type options struct {
-	directory   string
-	config      string
-	ignore      string
-	showAll     bool
-	concurrency int
-	dry         bool
-	force       bool
-	yes         bool
+	directory       string
+	config          string
+	ignore          string
+	showAll         bool
+	concurrency     int
+	dry             bool
+	force           bool
+	yes             bool
+	allowEmpty      bool
+	allowBucketRoot bool
 }
 
 const (
@@ -84,6 +86,8 @@ func newRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	flags.BoolVar(&opts.dry, "dry", false, "print tasks without making changes")
 	flags.BoolVarP(&opts.force, "force", "f", false, "upload every local file as Create")
 	flags.BoolVarP(&opts.yes, "yes", "y", false, "execute without asking for confirmation")
+	flags.BoolVar(&opts.allowEmpty, "allow-empty", false, "allow an empty local directory to remove remote objects")
+	flags.BoolVar(&opts.allowBucketRoot, "allow-bucket-root", false, "allow changes at the bucket root")
 	return command
 }
 
@@ -91,16 +95,9 @@ func synchronize(ctx context.Context, opts options, stdin io.Reader, stdout io.W
 	if opts.concurrency < 1 {
 		return fmt.Errorf("--concurrency must be at least 1")
 	}
-	root, err := filepath.Abs(opts.directory)
+	root, err := resolveRoot(opts.directory)
 	if err != nil {
-		return fmt.Errorf("resolve local directory: %w", err)
-	}
-	rootInfo, err := os.Stat(root)
-	if err != nil {
-		return fmt.Errorf("open local directory %q: %w", root, err)
-	}
-	if !rootInfo.IsDir() {
-		return fmt.Errorf("local path %q is not a directory", root)
+		return err
 	}
 
 	configPath, _, err := resolveAuxiliaryPath(root, opts.config, ".ossyncconfig")
@@ -159,6 +156,9 @@ func synchronize(ctx context.Context, opts options, stdin io.Reader, stdout io.W
 		fmt.Fprintf(stdout, "Dry run: %d task(s), no changes made.\n", len(tasks))
 		return nil
 	}
+	if err := validateApplySafety(opts, target, len(local), counts.remove); err != nil {
+		return err
+	}
 	if !opts.yes {
 		confirmed, err := confirm(ctx, stdin, stdout)
 		if err != nil {
@@ -177,6 +177,35 @@ func synchronize(ctx context.Context, opts options, stdin io.Reader, stdout io.W
 		return err
 	}
 	fmt.Fprintf(stdout, "Synchronized %d task(s).\n", len(tasks))
+	return nil
+}
+
+func resolveRoot(directory string) (string, error) {
+	abs, err := filepath.Abs(directory)
+	if err != nil {
+		return "", fmt.Errorf("resolve local directory: %w", err)
+	}
+	root, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", fmt.Errorf("resolve local directory %q: %w", abs, err)
+	}
+	rootInfo, err := os.Stat(root)
+	if err != nil {
+		return "", fmt.Errorf("open local directory %q: %w", root, err)
+	}
+	if !rootInfo.IsDir() {
+		return "", fmt.Errorf("local path %q is not a directory", root)
+	}
+	return root, nil
+}
+
+func validateApplySafety(opts options, target config.Target, localFiles, removals int) error {
+	if target.Prefix == "" && !opts.allowBucketRoot {
+		return fmt.Errorf("refusing to modify the bucket root without --allow-bucket-root")
+	}
+	if localFiles == 0 && removals > 0 && !opts.allowEmpty {
+		return fmt.Errorf("refusing to remove %d remote object(s) from an empty local directory without --allow-empty", removals)
+	}
 	return nil
 }
 

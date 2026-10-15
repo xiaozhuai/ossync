@@ -43,4 +43,10 @@ ossync --dir ./public --force
 
 # Skip confirmation (useful in CI)
 ossync --dir ./public --yes
+
+# Explicitly allow syncing an empty directory when it removes remote objects
+ossync --dir ./public --allow-empty
+
+# Explicitly allow changes when the target is the bucket root
+ossync --dir ./public --allow-bucket-root
 ```

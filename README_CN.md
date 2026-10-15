@@ -43,4 +43,10 @@ ossync --dir ./public --force
 
 # 跳过确认（适合 CI）
 ossync --dir ./public --yes
+
+# 本地目录为空且会删除远端对象时，显式允许继续
+ossync --dir ./public --allow-empty
+
+# 同步目标为 Bucket 根目录时，显式允许修改
+ossync --dir ./public --allow-bucket-root
 ```

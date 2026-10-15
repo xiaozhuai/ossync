@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/mattn/go-colorable"
 
+	"ossync/internal/config"
 	"ossync/internal/syncer"
 )
 
@@ -59,6 +62,8 @@ func TestHelpCombinesShortAndLongFlags(t *testing.T) {
 	}
 	for _, expected := range []string{
 		"-a, --all",
+		"--allow-bucket-root",
+		"--allow-empty",
 		"-c, --config string",
 		"-d, --dir string",
 		"-f, --force",
@@ -69,6 +74,80 @@ func TestHelpCombinesShortAndLongFlags(t *testing.T) {
 		if !strings.Contains(stdout.String(), expected) {
 			t.Errorf("help does not contain %q:\n%s", expected, stdout.String())
 		}
+	}
+}
+
+func TestResolveRootFollowsDirectorySymlink(t *testing.T) {
+	parent := t.TempDir()
+	realRoot := filepath.Join(parent, "real")
+	if err := os.Mkdir(realRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	linkRoot := filepath.Join(parent, "link")
+	if err := os.Symlink(realRoot, linkRoot); err != nil {
+		t.Skipf("cannot create directory symlink: %v", err)
+	}
+
+	got, err := resolveRoot(linkRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(realRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("resolveRoot() = %q, want %q", got, want)
+	}
+}
+
+func TestValidateApplySafety(t *testing.T) {
+	tests := []struct {
+		name       string
+		opts       options
+		target     config.Target
+		localFiles int
+		removals   int
+		wantError  string
+	}{
+		{
+			name:      "bucket root requires opt in",
+			target:    config.Target{Bucket: "bucket"},
+			wantError: "--allow-bucket-root",
+		},
+		{
+			name:      "empty local requires opt in",
+			target:    config.Target{Bucket: "bucket", Prefix: "site/"},
+			removals:  2,
+			wantError: "--allow-empty",
+		},
+		{
+			name:       "both safeguards explicitly allowed",
+			opts:       options{allowBucketRoot: true, allowEmpty: true},
+			target:     config.Target{Bucket: "bucket"},
+			removals:   2,
+			localFiles: 0,
+		},
+		{
+			name:       "non-empty prefixed sync is safe",
+			target:     config.Target{Bucket: "bucket", Prefix: "site/"},
+			localFiles: 1,
+			removals:   2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateApplySafety(tt.opts, tt.target, tt.localFiles, tt.removals)
+			if tt.wantError == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+				t.Fatalf("validateApplySafety() error = %v, want %q", err, tt.wantError)
+			}
+		})
 	}
 }
 
