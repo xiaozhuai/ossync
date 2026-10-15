@@ -1,0 +1,36 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Setup Just
+        uses: extractions/setup-just@v4
+      - name: Build
+        run: |
+          just build
+      - name: Make Artifacts
+        run: |
+          mkdir artifacts
+          zip -j artifacts/ossync-windows-x64.zip build/windows/x64/ossync.exe
+          zip -j artifacts/ossync-macos-x64.zip build/macos/x64/ossync
+          zip -j artifacts/ossync-macos-arm64.zip build/macos/arm64/ossync
+          zip -j artifacts/ossync-linux-x64.zip build/linux/x64/ossync
+      - name: Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            artifacts/*.zip
