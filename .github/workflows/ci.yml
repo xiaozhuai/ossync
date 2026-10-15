@@ -7,20 +7,65 @@ on:
     branches: [ master ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  build:
+  quality:
+    name: Quality (Go ${{ matrix.go-version }})
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ["1.23.x", "stable"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+      - name: Setup Go
+        uses: actions/setup-go@v7
         with:
-          submodules: recursive
+          go-version: ${{ matrix.go-version }}
+          cache-dependency-path: go.sum
+      - name: Check formatting
+        shell: bash
+        run: |
+          unformatted="$(git ls-files -z '*.go' | xargs -0 gofmt -l)"
+          if [[ -n "${unformatted}" ]]; then
+            echo "The following files need gofmt:"
+            echo "${unformatted}"
+            exit 1
+          fi
+      - name: Test
+        run: go test ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Race test
+        run: go test -race ./...
+
+  vulnerability-scan:
+    name: Vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-input: stable
+          go-package: ./...
+          cache-dependency-path: go.sum
+
+  build:
+    name: Cross-platform build
+    needs: [quality, vulnerability-scan]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
           go-version: stable
+          cache-dependency-path: go.sum
       - name: Setup Just
         uses: extractions/setup-just@v4
       - name: Build
-        run: |
-          just build
+        run: just build
