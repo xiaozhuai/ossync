@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README_CN.md)
 
-`ossync` performs one-way synchronization from a local directory to Alibaba Cloud OSS. New and modified local files are uploaded, while OSS objects that no longer exist locally are removed. Before making changes, it displays the planned tasks and asks for confirmation.
+`ossync` performs one-way synchronization from a local directory to Alibaba Cloud OSS. New and modified local files are uploaded, while OSS objects that no longer exist locally are removed. Deletions start only after every upload succeeds. Before making changes, it displays the planned tasks and asks for confirmation.
 
 ## Configuration
 

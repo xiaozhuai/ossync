@@ -161,32 +161,8 @@ func Execute(ctx context.Context, store Store, tasks []Task, concurrency int, pr
 	}
 	tracker := executionProgress{total: len(tasks), callback: progress}
 
-	deleteBatches := makeDeleteBatches(removals, deleteBatchSize)
-	jobs := make([]executionJob, 0, len(deleteBatches)+len(uploads))
-	for _, batch := range deleteBatches {
-		jobs = append(jobs, executionJob{tasks: batch})
-	}
-	for _, task := range uploads {
-		jobs = append(jobs, executionJob{tasks: []Task{task}})
-	}
-
-	// Removal batches are submitted first, followed immediately by uploads.
-	// There is deliberately no barrier between the two kinds of request.
-	return runPool(ctx, concurrency, jobs, func(ctx context.Context, job executionJob) error {
-		task := job.tasks[0]
+	if err := runPool(ctx, concurrency, uploads, func(ctx context.Context, task Task) error {
 		tracker.show(task)
-		if task.Action == Remove {
-			paths := make([]string, len(job.tasks))
-			for index, removal := range job.tasks {
-				paths[index] = removal.Path
-			}
-			if err := store.DeleteBatch(ctx, paths); err != nil {
-				return fmt.Errorf("Remove batch starting at %q: %w", task.Path, err)
-			}
-			tracker.advance(len(job.tasks), job.tasks[len(job.tasks)-1])
-			return nil
-		}
-
 		md5sum, err := fileMD5(task.Local)
 		if err != nil {
 			return fmt.Errorf("rehash %q before upload: %w", task.Path, err)
@@ -196,11 +172,24 @@ func Execute(ctx context.Context, store Store, tasks []Task, concurrency int, pr
 		}
 		tracker.advance(1, task)
 		return nil
-	})
-}
+	}); err != nil {
+		return err
+	}
 
-type executionJob struct {
-	tasks []Task
+	deleteBatches := makeDeleteBatches(removals, deleteBatchSize)
+	return runPool(ctx, concurrency, deleteBatches, func(ctx context.Context, batch []Task) error {
+		task := batch[0]
+		tracker.show(task)
+		paths := make([]string, len(batch))
+		for index, removal := range batch {
+			paths[index] = removal.Path
+		}
+		if err := store.DeleteBatch(ctx, paths); err != nil {
+			return fmt.Errorf("Remove batch starting at %q: %w", task.Path, err)
+		}
+		tracker.advance(len(batch), batch[len(batch)-1])
+		return nil
+	})
 }
 
 func splitTasks(tasks []Task) (uploads, removals []Task, err error) {

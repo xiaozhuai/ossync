@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -65,6 +66,7 @@ type fakeStore struct {
 	actions          []string
 	deleteBatchSizes []int
 	deleteErr        error
+	uploadErr        error
 }
 
 func (f *fakeStore) List(context.Context) ([]RemoteObject, error) { return nil, nil }
@@ -72,7 +74,7 @@ func (f *fakeStore) Upload(_ context.Context, path, _ string, _ string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.actions = append(f.actions, "upload "+path)
-	return nil
+	return f.uploadErr
 }
 func (f *fakeStore) DeleteBatch(_ context.Context, paths []string) error {
 	f.mu.Lock()
@@ -127,14 +129,14 @@ func TestExecute(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"delete removed.txt", "upload created.txt", "upload modified.txt"}
+	want := []string{"upload created.txt", "upload modified.txt", "delete removed.txt"}
 	if !reflect.DeepEqual(store.actions, want) {
 		t.Fatalf("actions = %#v, want %#v", store.actions, want)
 	}
 	wantProgress := []progressEvent{
-		{0, 3, "removed.txt"}, {1, 3, "removed.txt"},
-		{1, 3, "created.txt"}, {2, 3, "created.txt"},
-		{2, 3, "modified.txt"}, {3, 3, "modified.txt"},
+		{0, 3, "created.txt"}, {1, 3, "created.txt"},
+		{1, 3, "modified.txt"}, {2, 3, "modified.txt"},
+		{2, 3, "removed.txt"}, {3, 3, "removed.txt"},
 	}
 	if !reflect.DeepEqual(progress, wantProgress) {
 		t.Fatalf("progress = %#v, want %#v", progress, wantProgress)
@@ -163,37 +165,37 @@ func TestExecuteBatchesRemovals(t *testing.T) {
 	}
 }
 
-type overlappingStore struct {
-	deleteStarted chan struct{}
-	releaseDelete chan struct{}
+type phasedStore struct {
 	uploadStarted chan struct{}
+	releaseUpload chan struct{}
+	deleteStarted chan struct{}
 }
 
-func (s *overlappingStore) List(context.Context) ([]RemoteObject, error) { return nil, nil }
-func (s *overlappingStore) Upload(context.Context, string, string, string) error {
+func (s *phasedStore) List(context.Context) ([]RemoteObject, error) { return nil, nil }
+func (s *phasedStore) Upload(ctx context.Context, _ string, _ string, _ string) error {
 	close(s.uploadStarted)
-	return nil
-}
-func (s *overlappingStore) DeleteBatch(ctx context.Context, _ []string) error {
-	close(s.deleteStarted)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-s.releaseDelete:
+	case <-s.releaseUpload:
 		return nil
 	}
 }
+func (s *phasedStore) DeleteBatch(context.Context, []string) error {
+	close(s.deleteStarted)
+	return nil
+}
 
-func TestExecuteStartsUploadsWithoutWaitingForAllDeletes(t *testing.T) {
+func TestExecuteWaitsForUploadsBeforeStartingDeletes(t *testing.T) {
 	root := t.TempDir()
 	filename := filepath.Join(root, "file.txt")
 	if err := os.WriteFile(filename, []byte("content"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	store := &overlappingStore{
-		deleteStarted: make(chan struct{}),
-		releaseDelete: make(chan struct{}),
+	store := &phasedStore{
 		uploadStarted: make(chan struct{}),
+		releaseUpload: make(chan struct{}),
+		deleteStarted: make(chan struct{}),
 	}
 	tasks := []Task{
 		{Action: Create, Path: "create.txt", Local: filename},
@@ -205,16 +207,21 @@ func TestExecuteStartsUploadsWithoutWaitingForAllDeletes(t *testing.T) {
 	}()
 
 	select {
+	case <-store.uploadStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for upload request")
+	}
+	select {
+	case <-store.deleteStarted:
+		t.Fatal("delete started before uploads completed")
+	default:
+	}
+	close(store.releaseUpload)
+	select {
 	case <-store.deleteStarted:
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for delete request")
 	}
-	select {
-	case <-store.uploadStarted:
-	case <-time.After(2 * time.Second):
-		t.Fatal("upload did not start while delete request was still running")
-	}
-	close(store.releaseDelete)
 	select {
 	case err := <-done:
 		if err != nil {
@@ -222,6 +229,26 @@ func TestExecuteStartsUploadsWithoutWaitingForAllDeletes(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for execution")
+	}
+}
+
+func TestExecuteSkipsDeletesWhenUploadFails(t *testing.T) {
+	root := t.TempDir()
+	filename := filepath.Join(root, "file.txt")
+	if err := os.WriteFile(filename, []byte("content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := &fakeStore{uploadErr: fmt.Errorf("upload failed")}
+	tasks := []Task{
+		{Action: Create, Path: "create.txt", Local: filename},
+		{Action: Remove, Path: "remove.txt"},
+	}
+	err := Execute(context.Background(), store, tasks, 2, nil)
+	if err == nil || !strings.Contains(err.Error(), "upload failed") {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if want := []string{"upload create.txt"}; !reflect.DeepEqual(store.actions, want) {
+		t.Fatalf("actions = %#v, want %#v", store.actions, want)
 	}
 }
 
